@@ -1,6 +1,7 @@
 module Her
 	module Model
 		class Relation
+			# Inject search params into the resulting objects if they're not already in there
 			alias_method :old_fetch, :fetch
 			def fetch
 				results = old_fetch
@@ -24,6 +25,15 @@ module Her
             o.each { |entry| entry.send("#{inverse_of}_id=", @parent.id) }            
           end
        	end
+
+				def where(args)
+					all.fetch.select {|pt| pt['id'].to_s == args[:id].to_s}
+				end
+
+				def find(id, params={})
+					result = where({id: id}.merge(params))
+					result.empty? ? nil : result.first
+				end
 			end
 		end
 
@@ -44,41 +54,25 @@ module Skytap
 
 		collection_path 'projects/:project_id/templates' #This is where new items will be POSTed to
 
-		#before_save do
-			#assign_attributes(id: self.template_id)
-		#end
-
-		after_save do
-			# need template_id so that calling .template will work
-			assign_attributes(template_id: self.id)
-
-			# remove superfluous url attribute, which points to the main template URL and confuses things
-			delete_attribute(:url)
-		end
-
-		after_find do
-			# need template_id so that calling .template will work
-			assign_attributes(template_id: self.id)
-
-			# remove superfluous url attribute, which points to the main template URL and confuses things
-			delete_attribute(:url)
-		end
-
+		after_save :mark_saved
+		after_save :fix_attributes
+		after_find :fix_attributes
 
 		#proj.project_templates.first now works.
+		#ProjectTemplate.all works		
 		#ProjectTemplate.create(project_id: xyz, id: zyx) (where id = template id) works.
-		#Skytap::ProjectTemplate.find(project_id: 37878, id: 534113) now works (but only because I redefined .find)
-		#p.project_templates.where(id: 534113) works.
+		#ProjectTemplate.where(project_id: 37878, id: 534113) WORKS - I fixed it
+		#ProjectTemplate.find(project_id: 37878, id: 534113) WORKS - I fixed it
+		#p.project_templates.find/where(id: 534113) WORKS - I fixed it
 
-		# UNFIXED PROBLEMS:
+		def self.where(args)
+			#TODO - validate project_id?			
+			all(project_id: args[:project_id]).select {|pt| pt['id'].to_s == args[:id].to_s}
+		end
 
-		#Skytap::ProjectTemplate.where(project_id: 37878, id: 534113) DOES NOT work because it's trying to GET the resource
-		#p.project_templates.find(534113) DOES NOT work because it's trying to GET the resource
-		#project_template.destroy works, but doesn't update the object or its associations. is that the standard behavior?
-
-		def self.find(args)
-			pts = self.all(project_id: args[:project_id]).select {|pt| pt['id'].to_s == args[:id].to_s}
-			pts ? pts.first : nil
+		def self.find(id, params={})
+			result = where({id: id}.merge(params))
+			result.empty? ? nil : result.first
 		end
 
 		# Her assumes when id is being set, the record must already exist, and so it wants to PUT instead of POST.
@@ -87,10 +81,19 @@ module Skytap
 			!@saved
 		end
 
-		after_save do
+		private
+
+		def fix_attributes
+			# need template_id so that calling .template will work
+			assign_attributes(template_id: self.id)
+
+			# remove superfluous url attribute, which points to the main template URL and confuses things
+			delete_attribute(:url)
+		end
+
+		def mark_saved
 			@saved = true
 		end
 
-		# We're in pretty good shape now. What about GET?
 	end
 end
