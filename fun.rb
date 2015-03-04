@@ -17,6 +17,7 @@ end
 require 'httplog'
 HttpLog.options[:log_headers] = true
 
+#require 'her_extensions'
 require 'setup'
 
 

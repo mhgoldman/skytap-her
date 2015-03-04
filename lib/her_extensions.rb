@@ -1,6 +1,27 @@
 module Her
 	module Model
+		module ClassMethods
+			def use_lazy_finders(setting=true)
+				@use_lazy_finders = setting
+			end
+
+			def using_lazy_finders?
+				!!@use_lazy_finders
+			end
+		end
+
+	  module Attributes		
+	  	# Allow deletion of attributes coming from the server that we don't want visible on the object
+			def delete_attribute(key)
+				@attributes.delete(key)
+			end
+		end
+
 		class Relation
+			def using_lazy_finders?
+				@parent.using_lazy_finders?
+			end
+
 			# Inject search params into the resulting objects if they're not already in there
 			alias_method :old_fetch, :fetch
 			def fetch
@@ -12,15 +33,38 @@ module Her
         end
 				results
 			end
+
+			alias_method :old_where, :where
+			def where(args)
+				using_lazy_finders? ? lazy_where(args) : old_where(args)
+			end
+
+			def lazy_where(args)
+				parent_key = @parent.primary_key
+				all(args.reject {|key| key == parent_key}).select {|pt| pt[parent_key.to_s].to_s == args[parent_key].to_s}
+			end
+
+			alias_method :old_find, :find
+			def find(*ids)
+				using_lazy_finders? ? lazy_find(*ids) : old_find(*ids)
+			end
+
+			def lazy_find(*ids)
+	      params = @params.merge(ids.last.is_a?(Hash) ? ids.pop : {})
+	      ids = Array(params[@parent.primary_key]) if params.key?(@parent.primary_key)
+	      results = ids.flatten.compact.uniq.map do |id|
+					where({@parent.primary_key => id}.merge(params)).first
+				end
+	      ids.length > 1 || ids.first.kind_of?(Array) ? results : results.first
+			end
 		end
 
 		module Associations
-			# Can add methods here and have them be at the level of association
-			def use_lazy_finders(setting=true)
-				@use_lazy_finders = setting
-			end
-
 			class HasManyAssociation
+				def using_lazy_finders?
+					!!@opts[:use_lazy_finders]
+				end
+
 				#For has_many associations, inject the parent_id into the attributes of the collection members so that they can actually have URLs
 				alias_method :old_fetch, :fetch
 				def fetch
@@ -31,42 +75,24 @@ module Her
           end
        	end
 
-       	# TODO -- this logic should only be used for certain models...
        	alias_method :old_where, :where
-				
-				def lazy_where(params={})
-					all.fetch.select {|pt| pt['id'].to_s == params[:id].to_s}
-				end
+       	def where(args)
+       		using_lazy_finders? ? lazy_where(args) : old_where(args)
+       	end
 
-				def where(params={})
-					@use_lazy_finders ? lazy_where(params) : old_where(params)
+				def lazy_where(args)
+					all.fetch.select {|pt| pt['id'].to_s == args[:id].to_s}
 				end
 
 				alias_method :old_find, :find
-
-				#TODO Haven't tested this yet and doubt it works
-				def lazy_find(*ids)
-					params = @params.merge(ids.last.is_a?(Hash) ? ids.pop : {})
-	        ids = Array(params[@parent.primary_key]) if params.key?(@parent.primary_key)
-
-      	  results = ids.flatten.compact.uniq.map do |id|
-    	    	result = where({@parent.primary_key: id}.merge(params))
-  	      	result.empty? ? nil : result.first
-	        end
+				def find(id)
+					using_lazy_finders? ? lazy_find(id) : old_find(id)
 				end
 
-				#TODO: RUH-ROH! This probably won't work because the method signatures don't work.
-				#Make lazy_find accept *params 
-				def find(*ids)
-					@use_lazy_finders ? lazy_find(params) : old_find(params)
+				def lazy_find(id)
+					result = where({id: id}.merge(params))
+					result.empty? ? nil : result.first
 				end
-			end
-		end
-
-	  module Attributes		
-	  	#Allow deletion of attributes coming from the server that we don't want visible on the object
-			def delete_attribute(key)
-				@attributes.delete(key)
 			end
 		end
 	end
