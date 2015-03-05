@@ -19,14 +19,12 @@ module Her
 			alias_method :old_fetch, :fetch
 			def fetch
 				results = old_fetch
-
         0.upto(results.length-1) do |i|
         	path = @params.include?(results[i].class.primary_key) ? results[i].class.resource_path : results[i].class.collection_path
           @params.each do |k,v|
           	results[i].attributes[k] = v if (!results[i].attributes[k] && path.match(":_?#{k}"))
         	end
         end
-
 				results
 			end
 
@@ -76,10 +74,9 @@ module Her
        		using_collection_finders? ? where_from_collection(args) : normal_where(args)
        	end
 
-       	#TODO: recheck this logic. What if args contains something other than id. should this be like the other where_from_collection? YES.
-       	#Relation.where_from_collection passes in the where stuff as a querystring. this doesn't actually do anything, but maybe could in the future.
 				def where_from_collection(args)
-					all.fetch.select {|pt| pt['id'].to_s == args[:id].to_s}
+					parent_key = @parent.class.primary_key
+					all(args.reject {|key| key == parent_key}).select {|pt| pt[parent_key.to_s].to_s == args[parent_key].to_s}
 				end
 
 				alias_method :normal_find, :find
