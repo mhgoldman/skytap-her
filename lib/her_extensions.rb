@@ -1,55 +1,51 @@
 module Her
 	module Model
 		module ClassMethods
-			def use_lazy_finders(setting=true)
-				@use_lazy_finders = setting
+			def use_collection_finders(setting=true)
+				@use_collection_finders = setting
 			end
 
-			def using_lazy_finders?
-				!!@use_lazy_finders
-			end
-		end
-
-	  module Attributes		
-	  	# Allow deletion of attributes coming from the server that we don't want visible on the object
-			def delete_attribute(key)
-				@attributes.delete(key)
+			def using_collection_finders?
+				!!@use_collection_finders
 			end
 		end
 
 		class Relation
-			def using_lazy_finders?
-				@parent.using_lazy_finders?
+			def using_collection_finders?
+				@parent.using_collection_finders?
 			end
 
-			# Inject search params into the resulting objects if they're not already in there
+			# Inject search params in the resource path into the resulting objects if they're not already in there
 			alias_method :old_fetch, :fetch
 			def fetch
 				results = old_fetch
+
         0.upto(results.length-1) do |i|
+        	path = @params.include?(results[i].class.primary_key) ? results[i].class.resource_path : results[i].class.collection_path
           @params.each do |k,v|
-            results[i].attributes[k] = v unless results[i].attributes[k]
-          end
+          	results[i].attributes[k] = v if (!results[i].attributes[k] && path.match(":_?#{k}"))
+        	end
         end
+
 				results
 			end
 
-			alias_method :old_where, :where
+			alias_method :normal_where, :where
 			def where(args)
-				using_lazy_finders? ? lazy_where(args) : old_where(args)
+				using_collection_finders? ? where_from_collection(args) : normal_where(args)
 			end
 
-			def lazy_where(args)
+			def where_from_collection(args)
 				parent_key = @parent.primary_key
 				all(args.reject {|key| key == parent_key}).select {|pt| pt[parent_key.to_s].to_s == args[parent_key].to_s}
 			end
 
-			alias_method :old_find, :find
+			alias_method :normal_find, :find
 			def find(*ids)
-				using_lazy_finders? ? lazy_find(*ids) : old_find(*ids)
+				using_collection_finders? ? find_from_collection(*ids) : normal_find(*ids)
 			end
 
-			def lazy_find(*ids)
+			def find_from_collection(*ids)
 	      params = @params.merge(ids.last.is_a?(Hash) ? ids.pop : {})
 	      ids = Array(params[@parent.primary_key]) if params.key?(@parent.primary_key)
 	      results = ids.flatten.compact.uniq.map do |id|
@@ -61,8 +57,8 @@ module Her
 
 		module Associations
 			class HasManyAssociation
-				def using_lazy_finders?
-					!!@opts[:use_lazy_finders]
+				def using_collection_finders?
+					!!@opts[:use_collection_finders]
 				end
 
 				#For has_many associations, inject the parent_id into the attributes of the collection members so that they can actually have URLs
@@ -75,21 +71,23 @@ module Her
           end
        	end
 
-       	alias_method :old_where, :where
+       	alias_method :normal_where, :where
        	def where(args)
-       		using_lazy_finders? ? lazy_where(args) : old_where(args)
+       		using_collection_finders? ? where_from_collection(args) : normal_where(args)
        	end
 
-				def lazy_where(args)
+       	#TODO: recheck this logic. What if args contains something other than id. should this be like the other where_from_collection? YES.
+       	#Relation.where_from_collection passes in the where stuff as a querystring. this doesn't actually do anything, but maybe could in the future.
+				def where_from_collection(args)
 					all.fetch.select {|pt| pt['id'].to_s == args[:id].to_s}
 				end
 
-				alias_method :old_find, :find
+				alias_method :normal_find, :find
 				def find(id)
-					using_lazy_finders? ? lazy_find(id) : old_find(id)
+					using_collection_finders? ? find_from_collection(id) : normal_find(id)
 				end
 
-				def lazy_find(id)
+				def find_from_collection(id)
 					result = where({id: id}.merge(params))
 					result.empty? ? nil : result.first
 				end
