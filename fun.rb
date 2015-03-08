@@ -17,10 +17,10 @@ end
 require 'httplog'
 HttpLog.options[:log_headers] = true
 
-require 'her_extensions'
+require 'her_extensions/her/model/class_methods'
+require 'her_extensions/her/model/relation'
+require 'her_extensions/her/model/associations/has_many_association'
 require 'setup'
-
-
 
 # v = Skytap::VM.find(4685072, configuration_id: 3442128)
 # v.name = 'THE NAME CHANGE GOES HERE 6'
