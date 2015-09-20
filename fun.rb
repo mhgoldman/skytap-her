@@ -1,7 +1,7 @@
 $LOAD_PATH.unshift(File.join(File.dirname(__FILE__), 'lib'))
 
-ENV['HER_USER'] = 'martin@mgoldman.com'
-ENV['HER_PASS'] = '8135cd4229746c8741076a75e53f7ba979642764'
+ENV['HER_USER'] = ''
+ENV['HER_PASS'] = ''
 
 require 'her'
 
